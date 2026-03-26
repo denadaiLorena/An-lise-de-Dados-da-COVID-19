@@ -1,9 +1,9 @@
-# Ambientes virtuais (se você for usar)
+# Ambientes virtuais 
 .venv/
 venv/
 env/
 
-# Arquivos de dados (geralmente pesados e que não devem ir pro GitHub)
+# Arquivos de dados 
 *.csv
 *.xlsx
 *.parquet
