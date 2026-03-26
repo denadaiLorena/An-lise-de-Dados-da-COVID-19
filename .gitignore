@@ -1,2 +1,24 @@
-# Ignorar dados grandes
+# Ambientes virtuais (se você for usar)
+.venv/
+venv/
+env/
+
+# Arquivos de dados (geralmente pesados e que não devem ir pro GitHub)
+*.csv
+*.xlsx
+*.parquet
+*.sqlite3
+*.db
 dados_es_filtrados.csv
+
+# Cache do Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Configurações locais (senhas, chaves de API)
+.env
+
+# Arquivos do sistema operacional
+.DS_Store
+Thumbs.db
