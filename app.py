@@ -1,22 +1,71 @@
 import pandas as pd
 import streamlit as st
 import numpy as np
+import os
+import subprocess
 
 @st.cache_data
 def carregar_dados_es():
     """
     Carrega a base consolidada do ES no formato otimizado Parquet.
-    Formatos colunares são lidos em milissegundos e preservam tipos nativos 
-    como Categorias e Dates automaticamente!
+    Se o arquivo não existir, tenta gerá-lo usando o prepare_data.py.
     """
-    df = pd.read_parquet('dados_es_filtrados.parquet')
+    file_path = 'dados_es_filtrados.parquet'
+    
+    if not os.path.exists(file_path):
+        # Espaço vazio para descer o aviso
+        for _ in range(5):
+            st.write("")
+            
+        st.info("ℹ️ **Aviso:** Como esta é a primeira vez, o processamento inicial levará em média 60 segundos.")
+        
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        with st.status("Preparando base de dados otimizada...", expanded=True) as status:
+            # Executa o script e lê a saída em tempo real
+            # Usamos 'latin1' ou 'cp1252' pois no Windows o terminal costuma usar encoding local
+            process = subprocess.Popen(
+                ["python", "prepare_data.py"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding='latin1',
+                errors='replace',
+                bufsize=1
+            )
+            
+            if process.stdout:
+                for line in process.stdout:
+                    if "PROGRESS:" in line:
+                        try:
+                            # Extrai apenas o número após PROGRESS:
+                            parts = line.split("PROGRESS:")
+                            if len(parts) > 1:
+                                value_str = parts[1].strip().split()[0]
+                                percent = int(value_str)
+                                prog_val = max(0, min(100, percent))
+                                progress_bar.progress(prog_val)
+                                status_text.text(f"Progresso: {prog_val}%")
+                        except (ValueError, IndexError):
+                            continue
+            
+            process.wait()
+            status.update(label="✅ Dados preparados com sucesso!", state="complete", expanded=False)
+            status_text.empty()
+            progress_bar.empty()
+
+    df = pd.read_parquet(file_path)
+    
+    # Padronizar a coluna Evolucao removendo hifens residuais ou nulos
+    df['Evolucao'] = df['Evolucao'].astype(str).replace({'-': 'Ignorado', 'nan': 'Ignorado'})
     
     # Remover registros com inconsistência: Evolucao indica Óbito, mas DataObito é nula
     obitos_mask = df['Evolucao'].astype(str).str.contains('bito', na=False, case=False)
     inconsistentes = obitos_mask & df['DataObito'].isnull()
     df = df[~inconsistentes]
     
-    # --- 🌟 MÉTRICA DE OURO: STATUS HONESTO (MUNDO REAL) ---
+    # ---  MÉTRICA DE OURO:  MUNDO REAL ---
     # Ao invés de df.apply(axis=1) que é lento, usamos np.select para vetorização máxima (leva milissegundos)
     cond_obito = df['Evolucao'].astype(str).str.contains('bito', case=False, na=False)
     cond_cura = df['Evolucao'].astype(str).str.contains('Cura', case=False, na=False)
@@ -37,7 +86,7 @@ def main():
     st.title("Painel COVID-19 - Espírito Santo")
 
     # Mostrar o processo KDD num Expander na barra lateral
-    with st.sidebar.expander("🛠️ Processo KDD e Qualidade de Dados", expanded=False):
+    with st.sidebar.expander("Processo KDD e Qualidade de Dados", expanded=False):
         st.markdown('''
         **Knowledge Discovery in Databases (KDD)**
         
@@ -60,8 +109,12 @@ def main():
     # Calcular métricas principais usando a Métrica Honesta nativa
     total_casos = len(df)
     
-    # Identificar óbitos (Pelo Status Honesto)
-    df['Obito_Binario'] = (df['Status_Analise'] == 'Óbito').astype(int)
+    # Identificar óbitos (Pela coluna nativa preparada ou pela Métrica Honesta)
+    if 'Obito' in df.columns:
+        df['Obito_Binario'] = df['Obito'].astype(int)
+    else:
+        df['Obito_Binario'] = (df['Status_Analise'] == 'Óbito').astype(int)
+        
     total_obitos = df['Obito_Binario'].sum()
     taxa_letalidade = (total_obitos / total_casos) * 100 if total_casos > 0 else 0
     
@@ -103,8 +156,8 @@ def main():
         hide_index=True
     )
     
-    with st.expander("Visualizar Microdados (Amostra de 100 linhas)"):
-        st.dataframe(df.drop(columns=['Obito_Binario']).head(100), use_container_width=True)
+    with st.expander("Visualizar Microdados (Amostra de 200 linhas)"):
+        st.dataframe(df.drop(columns=['Obito_Binario']).head(200), use_container_width=True)
 
 if __name__ == "__main__":
     main()
