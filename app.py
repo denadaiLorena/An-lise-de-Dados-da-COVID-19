@@ -5,7 +5,7 @@ import os
 import subprocess
 import requests
 import plotly.express as px
-
+import sys
 @st.cache_data
 def carregar_dados_es():
     """
@@ -15,20 +15,24 @@ def carregar_dados_es():
     file_path = 'dados_es_filtrados.parquet'
     
     if not os.path.exists(file_path):
-        # Espaço vazio para descer o aviso
         for _ in range(5):
             st.write("")
             
-        st.info("ℹ️ **Aviso:** Como esta é a primeira vez, o processamento inicial levará em média 60 segundos.")
+        st.info("ℹ️ **Aviso:** Como esta é a primeira vez, baixaremos e processaremos a base de dados.")
         
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        
+        col_down, col_proc = st.columns(2)
+        with col_down:
+            st.markdown("**📥 Download da Base**")
+            progress_bar_down = st.progress(0)
+            status_text_down = st.empty()
+        with col_proc:
+            st.markdown("**⚙️ Processamento de Dados**")
+            progress_bar_proc = st.progress(0)
+            status_text_proc = st.empty()
+            
         with st.status("Preparando base de dados otimizada...", expanded=True) as status:
-            # Executa o script e lê a saída em tempo real
-            # Usamos 'latin1' ou 'cp1252' pois no Windows o terminal costuma usar encoding local
             process = subprocess.Popen(
-                ["python", "prepare_data.py"],
+                [sys.executable, "prepare_data.py"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -39,23 +43,25 @@ def carregar_dados_es():
             
             if process.stdout:
                 for line in process.stdout:
-                    if "PROGRESS:" in line:
+                    if "DOWNLOAD:" in line:
                         try:
-                            # Extrai apenas o número após PROGRESS:
-                            parts = line.split("PROGRESS:")
-                            if len(parts) > 1:
-                                value_str = parts[1].strip().split()[0]
-                                percent = int(value_str)
-                                prog_val = max(0, min(100, percent))
-                                progress_bar.progress(prog_val)
-                                status_text.text(f"Progresso: {prog_val}%")
-                        except (ValueError, IndexError):
-                            continue
+                            val = int(line.split("DOWNLOAD:")[1].strip())
+                            progress_bar_down.progress(max(0, min(100, val)))
+                            status_text_down.text(f"Progresso: {val}%")
+                        except: pass
+                    elif "PROCESSING:" in line:
+                        try:
+                            val = int(line.split("PROCESSING:")[1].strip())
+                            progress_bar_proc.progress(max(0, min(100, val)))
+                            status_text_proc.text(f"Progresso: {val}%")
+                        except: pass
             
             process.wait()
             status.update(label="✅ Dados preparados com sucesso!", state="complete", expanded=False)
-            status_text.empty()
-            progress_bar.empty()
+            status_text_down.empty()
+            status_text_proc.empty()
+            progress_bar_down.empty()
+            progress_bar_proc.empty()
 
     df = pd.read_parquet(file_path)
     

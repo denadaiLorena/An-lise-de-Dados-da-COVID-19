@@ -6,7 +6,6 @@ env/
 # Arquivos de dados 
 *.csv
 *.xlsx
-*.parquet
 *.sqlite3
 *.db
 dados_es_filtrados.csv
