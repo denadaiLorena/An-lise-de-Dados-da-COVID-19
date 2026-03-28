@@ -79,9 +79,10 @@ def main(argv: list[str] | None = None) -> int:
                 # Normaliza valores como 'Sim', 'Não', 'Nao', '-', nulos
                 chunk[col] = chunk[col].map(_normalize_yes_no_unknown).astype('int8')
 
-            # Garante tipagem consistente do inteiro de idade quando possível
+            # Preserva idade como texto (o CSV costuma vir como "X anos, Y meses...")
+            # O app faz o parsing e cria as faixas etárias.
             if 'IdadeNaDataNotificacao' in chunk.columns:
-                chunk['IdadeNaDataNotificacao'] = pd.to_numeric(chunk['IdadeNaDataNotificacao'], errors='coerce')
+                chunk['IdadeNaDataNotificacao'] = chunk['IdadeNaDataNotificacao'].astype('string')
 
             table = pa.Table.from_pandas(chunk, preserve_index=False)
 
