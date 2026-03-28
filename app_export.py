@@ -68,4 +68,3 @@ def render_export_section(
         mime="application/gzip",
     )
 
-    st.divider()

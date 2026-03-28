@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 import os
+import html
 
 from app_features import extrair_idade_anos
 from app_geo import carregar_geojson_municipios_es, normalizar_municipio, _get_geojson_municipio_nome
@@ -25,13 +26,120 @@ from app_nav import (
 )
 
 
+# Paleta inspirada na bandeira do Espírito Santo (Azul, Rosa e Branco)
+ES_BLUE = "#005AA7"
+ES_PINK = "#E91E63"
+ES_WHITE = "#FFFFFF"
+ES_SCALE = [
+    [0.0, "#FFFFFF"],
+    [0.45, "#F8BBD0"],
+    [1.0, ES_BLUE],
+]
+
+
 def _anchor(anchor_id: str) -> None:
     # Links do tipo [texto](#anchor_id) funcionam quando existe um elemento com id no DOM.
     st.markdown(f'<a id="{anchor_id}"></a>', unsafe_allow_html=True)
 
 
+def _inject_kpi_card_css() -> None:
+    st.markdown(
+        """
+<style>
+.kdd-metric-card{
+    --kdd-accent: var(--primary-color);
+    --kdd-bg: var(--secondary-background-color);
+  padding: 0.75rem 0.9rem;
+    border: 1px solid var(--kdd-accent);
+    border-radius: 0.55rem;
+    background: var(--kdd-bg);
+}
+
+.kdd-metric-card.kdd-accent-red{ --kdd-accent: #ef4444; --kdd-bg: rgba(239, 68, 68, 0.14); }
+.kdd-metric-card.kdd-accent-yellow{ --kdd-accent: #f59e0b; --kdd-bg: rgba(245, 158, 11, 0.16); }
+.kdd-metric-card.kdd-accent-green{ --kdd-accent: #10b981; --kdd-bg: rgba(16, 185, 129, 0.14); }
+.kdd-metric-card.kdd-accent-blue{ --kdd-accent: #3b82f6; --kdd-bg: rgba(59, 130, 246, 0.14); }
+
+.kdd-metric-card .kdd-kpi-label{
+    font-size: 0.9rem;
+    font-weight: 650;
+    line-height: 1.2;
+    color: var(--text-color);
+    opacity: 0.9;
+}
+
+.kdd-metric-card .kdd-kpi-value{
+    font-size: 2.1rem;
+    font-weight: 750;
+    line-height: 1.05;
+    margin-top: 0.25rem;
+    color: var(--text-color);
+}
+
+.kdd-metric-card .kdd-kpi-delta{
+    font-size: 0.85rem;
+    margin-top: 0.35rem;
+    color: var(--text-color);
+    opacity: 0.85;
+}
+</style>
+""",
+        unsafe_allow_html=True,
+    )
+
+
+def _metric_card(
+    label: str,
+    value: str,
+    *,
+    accent: str,
+    delta: str | None = None,
+    delta_color: str = "normal",
+) -> None:
+    accent_class = {
+        "red": "kdd-accent-red",
+        "yellow": "kdd-accent-yellow",
+        "green": "kdd-accent-green",
+        "blue": "kdd-accent-blue",
+    }.get(accent, "")
+
+    safe_label = html.escape(str(label))
+    safe_value = html.escape(str(value))
+
+    delta_html = ""
+    if delta is not None and str(delta).strip() != "":
+        safe_delta = html.escape(str(delta))
+        # Mantém a API delta/delta_color, mas com renderização simples.
+        # (Caso queira setas e cores exatas, a gente parametriza aqui depois.)
+        delta_html = f'<div class="kdd-kpi-delta">{safe_delta}</div>'
+
+    st.markdown(
+        f"""
+<div class="kdd-metric-card {accent_class}">
+  <div class="kdd-kpi-label">{safe_label}</div>
+  <div class="kdd-kpi-value">{safe_value}</div>
+  {delta_html}
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+
 def render_sidebar_kdd_expander() -> None:
-    with st.sidebar.expander("Processo KDD e Qualidade de Dados", expanded=False):
+    # Mantido por compatibilidade: o conteúdo agora é exibido no rodapé (fim da página).
+    render_kdd_footer_expander()
+
+
+def render_kdd_footer_expander() -> None:
+    st.divider()
+
+    st.markdown(
+        "<div class='kdd-section-title' style='text-align:left; font-weight:600; font-size:27px;'>Metodologia</div>",
+        unsafe_allow_html=True,
+    )
+
+    # Sem colunas: o expander usa a largura total disponível.
+    with st.expander("Processo KDD e Qualidade de Dados", expanded=False):
         csv_path = "MICRODADOS.csv"
         parquet_path = "dados_es_filtrados.parquet"
 
@@ -78,27 +186,63 @@ Este painel foi construído com foco em **ganho de performance**, **consistênci
 
 **4) KDD na análise de sobrevida (seção de datas/óbito)**
 - O cálculo usa **IQR (Intervalo Interquartil)** para tratar outliers de “dias até óbito”, reduzindo ruído estatístico.
-            """
-        )
+                """
+    )
 
 
 def render_kpis(df: pd.DataFrame) -> None:
     _anchor(ANCHOR_KPIS)
     st.subheader("Indicadores Gerais de Saúde")
 
-    total_casos = len(df)
+    _inject_kpi_card_css()
 
-    if "Obito" in df.columns:
-        total_obitos = df["Obito"].astype(int).sum()
-    else:
+    total_notificacoes = len(df)
+
+    if "Status_Analise" in df.columns:
+        total_recuperados = (df["Status_Analise"] == "Recuperado").sum()
+        total_investigacao = (df["Status_Analise"] == "Em Aberto / Ignorado").sum()
         total_obitos = (df["Status_Analise"] == "Óbito").sum()
+        total_desfechos = int(total_obitos + total_recuperados)
+    else:
+        # Fallback defensivo (caso alguém chame render_kpis com um df não enriquecido pelo loader)
+        total_obitos = (
+            df["Obito"].astype(int).sum() if "Obito" in df.columns else 0
+        )
+        total_recuperados = 0
+        total_investigacao = 0
+        total_desfechos = 0
 
-    taxa_letalidade = (total_obitos / total_casos) * 100 if total_casos > 0 else 0
+    taxa_letalidade = (total_obitos / total_desfechos * 100) if total_desfechos > 0 else 0.0
 
-    kpi1, kpi2, kpi3 = st.columns(3)
-    kpi1.metric("Total de Casos Confirmados", f"{total_casos:,}".replace(",", "."))
-    kpi2.metric("Total de Óbitos", f"{total_obitos:,}".replace(",", "."))
-    kpi3.metric("Taxa de Letalidade (T.L.)", f"{taxa_letalidade:.2f}%")
+    k1, k2, k3, k4 = st.columns(4)
+    with k1:
+        _metric_card(
+            "Total de Notificações",
+            f"{total_notificacoes:,}".replace(",", "."),
+            accent="blue",
+        )
+    with k2:
+        _metric_card(
+            "Recuperados",
+            f"{total_recuperados:,}".replace(",", "."),
+            accent="green",
+        )
+    with k3:
+        _metric_card(
+            "Casos em Investigação",
+            f"{total_investigacao:,}".replace(",", "."),
+            accent="yellow",
+        )
+    with k4:
+        _metric_card(
+            "Óbitos",
+            f"{total_obitos:,}".replace(",", "."),
+            accent="red",
+        )
+
+    st.caption(
+        f"Letalidade (apenas desfechos finais: Óbito/(Óbito+Recuperado)): {taxa_letalidade:.2f}%"
+    )
 
     st.divider()
 
@@ -110,40 +254,72 @@ def render_municipio_table(df: pd.DataFrame) -> None:
         "A tabela abaixo agrupa dados por município para facilitar a tomada de decisão focada na taxa de letalidade."
     )
 
-    if "Obito" in df.columns:
+    # Letalidade deve considerar apenas casos com desfecho final confirmado.
+    if "Status_Analise" in df.columns:
+        df_base = df[df["Status_Analise"].isin(["Óbito", "Recuperado"])].copy()
         df_municipio = (
-            df.groupby("Municipio")
-            .agg(Casos=("Municipio", "count"), Obitos=("Obito", lambda x: x.astype(int).sum()))
-            .reset_index()
-        )
-    else:
-        df_municipio = (
-            df.groupby("Municipio")
+            df_base.groupby("Municipio")
             .agg(
                 Casos=("Municipio", "count"),
                 Obitos=("Status_Analise", lambda x: (x == "Óbito").sum()),
             )
             .reset_index()
         )
+    else:
+        # Fallback: sem Status_Analise não dá para separar "Em Aberto" corretamente.
+        if "Obito" in df.columns:
+            df_municipio = (
+                df.groupby("Municipio")
+                .agg(
+                    Casos=("Municipio", "count"),
+                    Obitos=("Obito", lambda x: x.astype(int).sum()),
+                )
+                .reset_index()
+            )
+        else:
+            df_municipio = df.groupby("Municipio").size().reset_index(name="Casos")
+            df_municipio["Obitos"] = 0
 
-    df_municipio["Taxa Letalidade (%)"] = (df_municipio["Obitos"] / df_municipio["Casos"]) * 100
+    df_municipio["Taxa Letalidade (%)"] = (
+        df_municipio["Obitos"] / df_municipio["Casos"]
+    ) * 100
     df_municipio = df_municipio.sort_values(by="Taxa Letalidade (%)", ascending=False)
 
-    st.dataframe(
-        df_municipio,
-        column_config={
-            "Casos": st.column_config.NumberColumn(format="%d"),
-            "Obitos": st.column_config.NumberColumn(format="%d"),
-            "Taxa Letalidade (%)": st.column_config.ProgressColumn(
-                "Taxa Letalidade (%)",
-                format="%.2f%%",
-                min_value=0,
-                max_value=max(df_municipio["Taxa Letalidade (%)"]) if not df_municipio.empty else 100,
-            ),
-        },
-        use_container_width=True,
-        hide_index=True,
+    st.caption(
+        "Letalidade por município calculada apenas com desfechos finais (Óbito+Recuperado)."
     )
+
+    def _row_bg_by_volume(row: pd.Series) -> list[str]:
+        try:
+            casos = float(row.get("Casos", 0))
+        except Exception:
+            casos = 0.0
+
+        if casos > 1000:
+            bg = "background-color: rgba(239, 68, 68, 0.16);"  # vermelho claro
+        elif casos < 100:
+            bg = "background-color: rgba(16, 185, 129, 0.14);"  # verde claro
+        else:
+            bg = ""
+        return [bg] * len(row)
+
+    styler = (
+        df_municipio.style.apply(_row_bg_by_volume, axis=1)
+        .format(
+            {
+                "Casos": lambda v: f"{int(v):,}".replace(",", ".") if pd.notnull(v) else "",
+                "Obitos": lambda v: f"{int(v):,}".replace(",", ".") if pd.notnull(v) else "",
+                "Taxa Letalidade (%)": lambda v: f"{v:.2f}%" if pd.notnull(v) else "",
+            }
+        )
+    )
+    # Compatibilidade pandas (hide vs hide_index)
+    if hasattr(styler, "hide"):
+        styler = styler.hide(axis="index")
+    elif hasattr(styler, "hide_index"):
+        styler = styler.hide_index()
+
+    st.dataframe(styler, use_container_width=True)
 
     with st.expander("🔍 Visualizar Microdados (Amostra de 200 linhas)"):
         st.dataframe(df.head(200), use_container_width=True)
@@ -192,15 +368,34 @@ def render_mapa_es_e_ranking(df: pd.DataFrame) -> None:
     c2.metric("Casos (Interior)", f"{casos_int:,}".replace(",", "."))
     c3.metric("% na Grande Vitória", f"{pct_gv:.2f}%")
 
+    # Volume total (notificações) por município
     df_stats_mun = (
         df_tmp.groupby("Municipio_norm", dropna=False)
-        .agg(Casos=("Municipio_norm", "size"), Obitos=("Obito", "sum"))
+        .agg(Notificacoes=("Municipio_norm", "size"), Obitos=("Obito", "sum"))
         .reset_index()
     )
-    df_stats_mun["Taxa Letalidade (%)"] = (df_stats_mun["Obitos"] / df_stats_mun["Casos"]) * 100
+
+    # Desfechos finais (Óbito + Recuperado) para cálculo de letalidade
+    if "Status_Analise" in df_tmp.columns:
+        df_desfecho = df_tmp[df_tmp["Status_Analise"].isin(["Óbito", "Recuperado"])].copy()
+        df_desfecho_stats = (
+            df_desfecho.groupby("Municipio_norm", dropna=False)
+            .agg(Desfechos=("Municipio_norm", "size"))
+            .reset_index()
+        )
+        df_stats_mun = df_stats_mun.merge(df_desfecho_stats, on="Municipio_norm", how="left")
+    else:
+        df_stats_mun["Desfechos"] = np.nan
+
+    df_stats_mun["Desfechos"] = df_stats_mun["Desfechos"].fillna(0).astype(int)
+    df_stats_mun["Taxa Letalidade (%)"] = np.where(
+        df_stats_mun["Desfechos"] > 0,
+        (df_stats_mun["Obitos"] / df_stats_mun["Desfechos"]) * 100,
+        0.0,
+    )
 
     df_top_risco = (
-        df_stats_mun[df_stats_mun["Casos"] >= 50]
+        df_stats_mun[df_stats_mun["Desfechos"] >= 50]
         .sort_values("Taxa Letalidade (%)", ascending=False)
         .head(10)
     )
@@ -228,15 +423,26 @@ def render_mapa_es_e_ranking(df: pd.DataFrame) -> None:
                 geojson=geojson,
                 locations="Municipio_norm",
                 featureidkey="properties.nome_norm",
-                color="Casos",
-                color_continuous_scale="Reds",
+                color="Notificacoes",
+                color_continuous_scale=ES_SCALE,
                 hover_name="Municipio_norm",
-                labels={"Casos": "Casos Conf."},
-                hover_data={"Casos": ":,", "Obitos": ":,", "Taxa Letalidade (%)": ":.2f"},
+                labels={"Notificacoes": "Notificações"},
+                hover_data={
+                    "Notificacoes": ":,",
+                    "Desfechos": ":,",
+                    "Obitos": ":,",
+                    "Taxa Letalidade (%)": ":.2f",
+                },
             )
             fig.update_geos(fitbounds="locations", visible=False)
             fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0}, height=600)
             st.plotly_chart(fig, use_container_width=True)
+
+            st.markdown(
+                "Observa-se que o mapa destaca **onde há maior volume de notificações** no recorte atual. "
+                "Ao passar o mouse, a **Taxa de Letalidade** exibida considera apenas **desfechos finais (Óbito+Recuperado)**, "
+                "o que evita subestimar/mascarar risco com casos ainda em aberto."
+            )
     except Exception as e:
         st.info("Não foi possível carregar o mapa agora.")
         st.caption(f"Detalhe: {e}")
@@ -252,7 +458,7 @@ def render_mapa_es_e_ranking(df: pd.DataFrame) -> None:
                 y="Municipio_norm",
                 orientation="h",
                 color="Taxa Letalidade (%)",
-                color_continuous_scale="Reds",
+                color_continuous_scale=ES_SCALE,
                 text_auto=True,
                 labels={
                     "Municipio_norm": "Município",
@@ -268,6 +474,15 @@ def render_mapa_es_e_ranking(df: pd.DataFrame) -> None:
                 coloraxis_showscale=True,
             )
             st.plotly_chart(fig_bar, use_container_width=True)
+
+        top1 = df_top_risco.iloc[0]
+        st.markdown(
+            (
+                f"Observa-se que **{top1['Municipio_norm']}** lidera a letalidade no recorte "
+                f"(**{top1['Taxa Letalidade (%)']:.2f}%**), considerando apenas municípios com **≥ 50 desfechos**. "
+                "Isso sugere que ações de vigilância e suporte assistencial podem ser priorizadas onde o risco é maior."
+            )
+        )
     else:
         st.info("Dados insuficientes para o ranking.")
 
@@ -275,6 +490,12 @@ def render_mapa_es_e_ranking(df: pd.DataFrame) -> None:
 def render_comorbidades_e_etaria(df: pd.DataFrame) -> None:
     st.divider()
     st.subheader("Análise de Risco e Comorbidades")
+
+    def _fmt_int(n: int | float) -> str:
+        return f"{int(n):,}".replace(",", ".")
+
+    def _fmt_pct(x: float, decimals: int = 1) -> str:
+        return f"{x:.{decimals}f}%"
 
     col_c1, col_c2 = st.columns(2)
 
@@ -295,17 +516,44 @@ def render_comorbidades_e_etaria(df: pd.DataFrame) -> None:
 
         if existentes:
             with st.spinner("Carregando gráficos de comorbidades..."):
+                df_desfechos = (
+                    df[df["Status_Analise"].isin(["Óbito", "Recuperado"])].copy()
+                    if "Status_Analise" in df.columns
+                    else None
+                )
+
+                baseline_letalidade = None
+                baseline_desfechos = None
+                if df_desfechos is not None and not df_desfechos.empty:
+                    baseline_desfechos = int(len(df_desfechos))
+                    baseline_obitos = float(df_desfechos["Obito"].sum())
+                    baseline_letalidade = (
+                        baseline_obitos / baseline_desfechos * 100
+                        if baseline_desfechos > 0
+                        else None
+                    )
+
                 resumo_comorb = []
                 for col, nome in comorb_cols.items():
                     if col in df.columns:
-                        df_sub = df[df[col] == True]
-                        total_casos = len(df_sub)
-                        obitos = df_sub["Obito"].sum() if total_casos > 0 else 0
-                        letalidade = (obitos / total_casos * 100) if total_casos > 0 else 0
+                        # Volume: usa todas as notificações (melhor leitura de tamanho amostral)
+                        df_sub = df[df[col] == 1]
+                        total_notif = int(len(df_sub))
+
+                        # Risco/letalidade: usa apenas desfechos finais (Óbito+Recuperado)
+                        if df_desfechos is not None:
+                            df_sub_des = df_desfechos[df_desfechos[col] == 1]
+                            total_des = int(len(df_sub_des))
+                            obitos = float(df_sub_des["Obito"].sum()) if total_des > 0 else 0.0
+                            letalidade = (obitos / total_des * 100) if total_des > 0 else 0.0
+                        else:
+                            total_des = 0
+                            letalidade = 0.0
                         resumo_comorb.append(
                             {
                                 "Comorbidade": nome,
-                                "Volume (Casos)": total_casos,
+                                "Volume (Casos)": total_notif,
+                                "Desfechos": total_des,
                                 "Risco de Óbito (%)": letalidade,
                             }
                         )
@@ -322,10 +570,20 @@ def render_comorbidades_e_etaria(df: pd.DataFrame) -> None:
                     title="Volume de Casos por Comorbidade",
                     labels={"Volume (Casos)": "Nº de Pacientes", "Comorbidade": ""},
                     template="plotly_white",
-                    color_discrete_sequence=["#455A64"],
+                    color_discrete_sequence=[ES_BLUE],
                 )
                 fig_comorb.update_layout(margin=dict(l=20, r=20, t=40, b=20), height=350)
                 st.plotly_chart(fig_comorb, use_container_width=True)
+
+                if not df_comorb_final.empty:
+                    top_vol = df_comorb_final.sort_values("Volume (Casos)", ascending=False).iloc[0]
+                    st.markdown(
+                        (
+                            f"Observa-se que **{top_vol['Comorbidade']}** aparece com maior volume "
+                            f"({_fmt_int(top_vol['Volume (Casos)'])} notificações com esta comorbidade nos filtros atuais). "
+                            "Isso sugere que intervenções para esse grupo tendem a ter maior alcance populacional."
+                        )
+                    )
 
                 df_comorb_risco = df_comorb_final.sort_values(
                     "Risco de Óbito (%)", ascending=True
@@ -338,7 +596,7 @@ def render_comorbidades_e_etaria(df: pd.DataFrame) -> None:
                     title="Qual comorbidade mais mata? (Letalidade %)",
                     labels={"Risco de Óbito (%)": "Chance de Óbito (%)", "Comorbidade": ""},
                     template="plotly_white",
-                    color_discrete_sequence=["#C62828"],
+                    color_discrete_sequence=[ES_PINK],
                 )
                 fig_risco.update_traces(texttemplate="%{x:.1f}%", textposition="outside")
                 fig_risco.update_layout(
@@ -347,6 +605,32 @@ def render_comorbidades_e_etaria(df: pd.DataFrame) -> None:
                     xaxis_ticksuffix="%",
                 )
                 st.plotly_chart(fig_risco, use_container_width=True)
+
+                if baseline_letalidade is not None and not df_comorb_final.empty:
+                    # Para evitar frases com amostras muito pequenas, prioriza desfechos >= 30.
+                    df_story = df_comorb_final[df_comorb_final["Desfechos"] >= 30].copy()
+                    if df_story.empty:
+                        df_story = df_comorb_final.copy()
+                    top_risk = df_story.sort_values("Risco de Óbito (%)", ascending=False).iloc[0]
+
+                    if baseline_letalidade > 0:
+                        diff_rel = ((top_risk["Risco de Óbito (%)"] - baseline_letalidade) / baseline_letalidade) * 100
+                        st.markdown(
+                            (
+                                f"Observa-se que a letalidade em pacientes com **{top_risk['Comorbidade']}** "
+                                f"é **{_fmt_pct(abs(diff_rel), 1)} {'maior' if diff_rel >= 0 else 'menor'}** "
+                                f"do que a taxa global dos desfechos finais (baseline **{_fmt_pct(baseline_letalidade, 2)}**). "
+                                "Isso sugere que a tomada de decisão deve priorizar ações de proteção (ex.: vacinação/monitoramento) "
+                                "para esse grupo dentro do recorte filtrado."
+                            )
+                        )
+                    else:
+                        st.markdown(
+                            (
+                                f"No recorte atual, a taxa global de letalidade (por desfechos) é muito baixa/zero. "
+                                f"Ainda assim, **{top_risk['Comorbidade']}** concentra a maior letalidade observada entre comorbidades."
+                            )
+                        )
         else:
             st.info("Colunas de comorbidades não encontradas.")
 
@@ -356,7 +640,10 @@ def render_comorbidades_e_etaria(df: pd.DataFrame) -> None:
 
         if "IdadeNaDataNotificacao" in df.columns:
             with st.spinner("Carregando gráficos de faixa etária..."):
-                df_age = df[["IdadeNaDataNotificacao", "Obito"]].copy()
+                cols_age = ["IdadeNaDataNotificacao", "Obito"]
+                if "Status_Analise" in df.columns:
+                    cols_age.append("Status_Analise")
+                df_age = df[cols_age].copy()
                 df_age["idade_num"] = extrair_idade_anos(df_age["IdadeNaDataNotificacao"])
 
                 bins = [0, 10, 20, 30, 40, 50, 60, 70, 80, 150]
@@ -383,9 +670,31 @@ def render_comorbidades_e_etaria(df: pd.DataFrame) -> None:
                     .reset_index()
                 )
                 df_perfil_age = df_perfil_age[df_perfil_age["Casos"] > 0]
-                df_perfil_age["Risco de Óbito (%)"] = (
-                    df_perfil_age["Obitos"] / df_perfil_age["Casos"]
-                ) * 100
+
+                # Recalcula risco por desfechos finais (Óbito+Recuperado), quando disponível
+                if "Status_Analise" in df_age.columns:
+                    df_age_des = df_age[df_age["Status_Analise"].isin(["Óbito", "Recuperado"])].copy()
+                    df_age_des = df_age_des.dropna(subset=["Faixa Etária"])
+                    df_age_des_stats = (
+                        df_age_des.groupby("Faixa Etária", observed=True)
+                        .agg(Desfechos=("idade_num", "size"))
+                        .reset_index()
+                    )
+                    df_perfil_age = df_perfil_age.merge(df_age_des_stats, on="Faixa Etária", how="left")
+                    df_perfil_age["Desfechos"] = df_perfil_age["Desfechos"].fillna(0).astype(int)
+                    df_perfil_age["Risco de Óbito (%)"] = np.where(
+                        df_perfil_age["Desfechos"] > 0,
+                        (df_perfil_age["Obitos"] / df_perfil_age["Desfechos"]) * 100,
+                        0.0,
+                    )
+                    baseline_des = int(len(df_age_des))
+                    baseline_ob = float(df_age_des["Obito"].sum()) if baseline_des > 0 else 0.0
+                    baseline_age_letalidade = (baseline_ob / baseline_des * 100) if baseline_des > 0 else None
+                else:
+                    baseline_age_letalidade = None
+                    df_perfil_age["Risco de Óbito (%)"] = (
+                        df_perfil_age["Obitos"] / df_perfil_age["Casos"]
+                    ) * 100
 
                 if df_perfil_age.empty:
                     st.info(
@@ -399,12 +708,21 @@ def render_comorbidades_e_etaria(df: pd.DataFrame) -> None:
                         title="Distribuição Etária (Volume)",
                         labels={"Casos": "Casos Conf.", "Faixa Etária": "Anos"},
                         template="plotly_white",
-                        color_discrete_sequence=["#78909C"],
+                        color_discrete_sequence=[ES_BLUE],
                     )
                     fig_idade.update_layout(
                         margin=dict(l=20, r=20, t=40, b=20), height=350
                     )
                     st.plotly_chart(fig_idade, use_container_width=True)
+
+                    top_age_vol = df_perfil_age.sort_values("Casos", ascending=False).iloc[0]
+                    st.markdown(
+                        (
+                            f"Observa-se que a faixa **{top_age_vol['Faixa Etária']}** concentra o maior volume "
+                            f"({_fmt_int(top_age_vol['Casos'])} notificações no recorte). "
+                            "Isso ajuda a dimensionar onde a maior parte da demanda se encontra."
+                        )
+                    )
 
                     fig_risco_age = px.bar(
                         df_perfil_age,
@@ -416,7 +734,7 @@ def render_comorbidades_e_etaria(df: pd.DataFrame) -> None:
                             "Faixa Etária": "Anos",
                         },
                         template="plotly_white",
-                        color_discrete_sequence=["#546E7A"],
+                        color_discrete_sequence=[ES_PINK],
                     )
                     fig_risco_age.update_traces(
                         texttemplate="%{y:.1f}%", textposition="outside"
@@ -427,6 +745,26 @@ def render_comorbidades_e_etaria(df: pd.DataFrame) -> None:
                         yaxis_ticksuffix="%",
                     )
                     st.plotly_chart(fig_risco_age, use_container_width=True)
+
+                    top_age_risk = df_perfil_age.sort_values("Risco de Óbito (%)", ascending=False).iloc[0]
+                    if baseline_age_letalidade is not None and baseline_age_letalidade > 0:
+                        diff_rel_age = ((top_age_risk["Risco de Óbito (%)"] - baseline_age_letalidade) / baseline_age_letalidade) * 100
+                        st.markdown(
+                            (
+                                f"Observa-se que a letalidade é mais alta na faixa **{top_age_risk['Faixa Etária']}** "
+                                f"(**{_fmt_pct(top_age_risk['Risco de Óbito (%)'], 2)}**), "
+                                f"o que representa **{_fmt_pct(abs(diff_rel_age), 1)} {'acima' if diff_rel_age >= 0 else 'abaixo'}** "
+                                f"da taxa global por desfechos (**{_fmt_pct(baseline_age_letalidade, 2)}**). "
+                                "Isso sugere priorização de estratégias de prevenção e acompanhamento clínico para esse grupo."
+                            )
+                        )
+                    else:
+                        st.markdown(
+                            (
+                                f"A maior letalidade observada no recorte está na faixa **{top_age_risk['Faixa Etária']}** "
+                                f"(**{_fmt_pct(top_age_risk['Risco de Óbito (%)'], 2)}**)."
+                            )
+                        )
         else:
             st.info("Coluna de idade não encontrada.")
 
@@ -481,7 +819,7 @@ def render_sobrevida_kdd(df: pd.DataFrame) -> None:
                 title="Antes: Com Outliers",
                 labels={"Dias_Sobrevida": "Dias"},
                 template="plotly_white",
-                color_discrete_sequence=["#EF5350"],
+                color_discrete_sequence=[ES_PINK],
             )
             fig_box_pre.update_layout(height=400)
             st.plotly_chart(fig_box_pre, use_container_width=True)
@@ -494,7 +832,7 @@ def render_sobrevida_kdd(df: pd.DataFrame) -> None:
                 title="Depois: Limpeza IQR",
                 labels={"Dias_Sobrevida": "Dias"},
                 template="plotly_white",
-                color_discrete_sequence=["#66BB6A"],
+                color_discrete_sequence=[ES_BLUE],
             )
             fig_box_pos.update_layout(height=400)
             st.plotly_chart(fig_box_pos, use_container_width=True)
@@ -523,12 +861,12 @@ def render_sobrevida_kdd(df: pd.DataFrame) -> None:
             title="Distribuição Final da Sobrevida (Dados Saneados)",
             labels={"Dias_Sobrevida": "Dias após Notificação", "count": "Frequência"},
             template="plotly_white",
-            color_discrete_sequence=["#455A64"],
+            color_discrete_sequence=[ES_BLUE],
         )
         fig_hist_final.add_vline(
             x=media_saneada,
             line_dash="dash",
-            line_color="red",
+            line_color=ES_PINK,
             annotation_text=f"Média: {media_saneada:.1f}",
         )
         fig_hist_final.update_layout(margin=dict(l=20, r=20, t=40, b=20), height=400)
@@ -544,7 +882,13 @@ def render_temporal_letalidade(df: pd.DataFrame) -> None:
     st.divider()
     st.subheader("Evolução Temporal da Taxa de Letalidade (%)")
 
-    df_temporal = df[["DataNotificacao", "Obito"]].copy()
+    # Letalidade temporal deve considerar apenas casos com desfecho final.
+    if "Status_Analise" in df.columns:
+        df_temporal = df[df["Status_Analise"].isin(["Óbito", "Recuperado"])][
+            ["DataNotificacao", "Obito"]
+        ].copy()
+    else:
+        df_temporal = df[["DataNotificacao", "Obito"]].copy()
     df_temporal["DataNotificacao"] = pd.to_datetime(df_temporal["DataNotificacao"], errors="coerce")
     df_temporal = df_temporal.dropna(subset=["DataNotificacao"])
 
@@ -560,7 +904,6 @@ def render_temporal_letalidade(df: pd.DataFrame) -> None:
 
     pico = stats_tempo.loc[stats_tempo["Taxa Letalidade (%)"].idxmax()]
 
-    st.markdown("##### 📈 Resultado da Análise Temporal")
     ct1, ct2 = st.columns([1, 3])
 
     with ct1:
@@ -588,12 +931,23 @@ def render_temporal_letalidade(df: pd.DataFrame) -> None:
                 text="PICO",
                 showarrow=True,
                 arrowhead=1,
-                arrowcolor="#C62828",
-                font=dict(color="#C62828", size=12),
+                arrowcolor=ES_PINK,
+                font=dict(color=ES_PINK, size=12),
             )
-            fig_evolucao.update_traces(line_color="#455A64")
+            fig_evolucao.update_traces(line_color=ES_BLUE)
             fig_evolucao.update_layout(margin=dict(l=20, r=20, t=40, b=20), height=400)
             st.plotly_chart(fig_evolucao, use_container_width=True)
+
+            if not stats_tempo.empty:
+                ultimo = stats_tempo.iloc[-1]
+                st.markdown(
+                    (
+                        f"Observa-se que o período de maior letalidade foi **{pico['Mes_Ano']}** "
+                        f"(**{pico['Taxa Letalidade (%)']:.2f}%**). "
+                        f"No período mais recente (**{ultimo['Mes_Ano']}**), a taxa está em **{ultimo['Taxa Letalidade (%)']:.2f}%**. "
+                        "Isso ajuda a contextualizar se o cenário atual está acima ou abaixo do pico histórico dentro do recorte aplicado."
+                    )
+                )
 
 
 def render_cura(df: pd.DataFrame) -> None:
@@ -638,7 +992,7 @@ def render_cura(df: pd.DataFrame) -> None:
                     title="Comorbidades em Pacientes Recuperados",
                     labels={"Total": "Nº de Recuperados", "Comorbidade": ""},
                     template="plotly_white",
-                    color_discrete_sequence=["#66BB6A"],
+                    color_discrete_sequence=[ES_BLUE],
                 )
                 fig_comorb_cura.update_layout(margin=dict(l=20, r=20, t=40, b=20), height=350)
                 st.plotly_chart(fig_comorb_cura, use_container_width=True)
@@ -679,7 +1033,7 @@ def render_cura(df: pd.DataFrame) -> None:
                     title="Distribuição Etária dos Recuperados",
                     labels={"Recuperados": "Nº de Pessoas", "Faixa Etária": "Anos"},
                     template="plotly_white",
-                    color_discrete_sequence=["#81C784"],
+                    color_discrete_sequence=[ES_BLUE],
                 )
                 fig_idade_cura.update_layout(margin=dict(l=20, r=20, t=40, b=20), height=350)
                 st.plotly_chart(fig_idade_cura, use_container_width=True)
@@ -725,10 +1079,9 @@ def render_cura(df: pd.DataFrame) -> None:
                 featureidkey="properties.nome_norm",
                 color="Taxa de Cura (%)",
                 color_continuous_scale=[
-                    [0, "#E8F5E9"],
-                    [0.5, "#81C784"],
-                    [0.8, "#388E3C"],
-                    [1, "#1B5E20"],
+                    [0.0, "#FFFFFF"],
+                    [0.5, "#F8BBD0"],
+                    [1.0, ES_BLUE],
                 ],
                 hover_name="Municipio_norm",
                 labels={"Taxa de Cura (%)": "Taxa de Cura (%)"},
