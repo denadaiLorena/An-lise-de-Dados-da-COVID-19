@@ -9,6 +9,8 @@ import streamlit as st
 
 
 PARQUET_PATH = "dados_es_filtrados.parquet"
+DEFAULT_INPUT_CSV = "MICRODADOS.csv"
+DEFAULT_URL_ENV = "MICRODADOS_URL"
 
 
 @st.cache_data
@@ -25,8 +27,24 @@ def carregar_dados_es(cache_buster: Optional[float] = None) -> pd.DataFrame:
         for _ in range(5):
             st.write("")
 
+        microdados_url = None
+        try:
+            microdados_url = st.secrets.get(DEFAULT_URL_ENV)  # type: ignore[attr-defined]
+        except Exception:
+            microdados_url = None
+        microdados_url = microdados_url or os.getenv(DEFAULT_URL_ENV)
+
+        if not os.path.exists(DEFAULT_INPUT_CSV) and not microdados_url:
+            st.error(
+                "Não encontrei `MICRODADOS.csv` no repositório e nenhuma URL foi configurada para baixar o arquivo.\n\n"
+                "No Streamlit Community Cloud, inclua o arquivo no repositório (ou via Git LFS), "
+                "ou configure um Secret/ENV chamado `MICRODADOS_URL` com um link direto do CSV."
+            )
+            st.stop()
+
         st.info(
-            "ℹ️ **Aviso:** Como esta é a primeira vez, baixaremos e processaremos a base de dados."
+            "ℹ️ **Primeira execução:** vamos preparar a base otimizada (Parquet). "
+            "Isso pode demorar alguns minutos."
         )
 
         col_down, col_proc = st.columns(2)
@@ -40,8 +58,12 @@ def carregar_dados_es(cache_buster: Optional[float] = None) -> pd.DataFrame:
             status_text_proc = st.empty()
 
         with st.status("Preparando base de dados otimizada...", expanded=True) as status:
+            cmd = [sys.executable, "prepare_data.py"]
+            if microdados_url:
+                cmd += ["--url", str(microdados_url)]
+
             process = subprocess.Popen(
-                [sys.executable, "prepare_data.py"],
+                cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -68,6 +90,19 @@ def carregar_dados_es(cache_buster: Optional[float] = None) -> pd.DataFrame:
                             pass
 
             process.wait()
+
+            if process.returncode != 0:
+                stderr_text = ""
+                try:
+                    stderr_text = (process.stderr.read() if process.stderr else "")
+                except Exception:
+                    stderr_text = ""
+
+                status.update(label="❌ Falha ao preparar os dados", state="error", expanded=True)
+                if stderr_text.strip():
+                    st.code(stderr_text[-4000:], language="text")
+                st.stop()
+
             status.update(label="✅ Dados preparados com sucesso!", state="complete", expanded=False)
             status_text_down.empty()
             status_text_proc.empty()

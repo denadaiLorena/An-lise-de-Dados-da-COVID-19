@@ -216,6 +216,36 @@ Se você quiser alterar cores, procure pelo bloco `<style>` dentro de `render_si
 
 ---
 
+## Deploy no Streamlit Community Cloud
+
+De acordo com a documentação do Streamlit Community Cloud, o deploy funciona melhor quando:
+
+- O entrypoint está no repositório (aqui é [app.py](app.py)).
+- As dependências estão declaradas em [requirements.txt](requirements.txt).
+- Qualquer arquivo local necessário para rodar o app também está disponível no ambiente (no repo ou baixado em runtime).
+
+### Configuração
+
+- **Main file path**: `app.py`
+
+### Dados (ponto mais comum de falha)
+
+Este app tenta gerar `dados_es_filtrados.parquet` automaticamente quando ele não existe.
+Para isso, ele precisa do `MICRODADOS.csv`.
+
+Opções no Cloud:
+
+1) Colocar `MICRODADOS.csv` no repositório (se for viável) — ou usar Git LFS para arquivos grandes.
+2) Configurar um Secret/ENV `MICRODADOS_URL` para o app baixar o CSV na primeira execução.
+
+No Streamlit Cloud: *App settings → Secrets*:
+
+```toml
+MICRODADOS_URL = "https://.../MICRODADOS.csv"
+```
+
+---
+
 ## 10) Dicas e troubleshooting
 
 ### “Não aparece nada / sem dados”
