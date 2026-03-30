@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -11,12 +12,13 @@ PARQUET_PATH = "dados_es_filtrados.parquet"
 
 
 @st.cache_data
-def carregar_dados_es(cache_buster: float | None = None) -> pd.DataFrame:
+def carregar_dados_es(cache_buster: Optional[float] = None) -> pd.DataFrame:
     """Carrega a base consolidada do ES no formato otimizado Parquet.
 
     Se o arquivo não existir, tenta gerá-lo usando o prepare_data.py.
     O parâmetro `cache_buster` existe apenas para invalidar o cache quando o Parquet mudar.
     """
+
     file_path = PARQUET_PATH
 
     if not os.path.exists(file_path):
@@ -66,9 +68,7 @@ def carregar_dados_es(cache_buster: float | None = None) -> pd.DataFrame:
                             pass
 
             process.wait()
-            status.update(
-                label="✅ Dados preparados com sucesso!", state="complete", expanded=False
-            )
+            status.update(label="✅ Dados preparados com sucesso!", state="complete", expanded=False)
             status_text_down.empty()
             status_text_proc.empty()
             progress_bar_down.empty()

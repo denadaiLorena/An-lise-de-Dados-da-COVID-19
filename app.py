@@ -3,11 +3,11 @@ import html
 
 import streamlit as st
 
-from app_data import PARQUET_PATH, carregar_dados_es
-from app_nav import NAV_ITEMS
-from app_export import render_export_section
-from app_filters import aplicar_filtros_sidebar
-from app_sections import (
+from covid_app.data import PARQUET_PATH, carregar_dados_es
+from covid_app.nav import NAV_ITEMS
+from covid_app.export import render_export_section
+from covid_app.filters import aplicar_filtros_sidebar
+from covid_app.sections import (
     render_comorbidades_e_etaria,
     render_cura,
     render_kdd_footer_expander,

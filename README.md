@@ -48,6 +48,12 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
+Se você tiver mais de um Python instalado, prefira rodar usando o executável da venv:
+
+```powershell
+.\.venv\Scripts\streamlit.exe run app.py
+```
+
 Na primeira execução (se não existir o Parquet), o app tenta preparar a base automaticamente.
 
 ---
@@ -85,7 +91,7 @@ python prepare_data.py --input MICRODADOS.csv --output dados_es_filtrados.parque
 
 ### Carregamento no app
 
-O carregamento e “enriquecimento” do dataset é feito em [app_data.py](app_data.py) pela função `carregar_dados_es()`:
+O carregamento e “enriquecimento” do dataset é feito em [covid_app/data.py](covid_app/data.py) pela função `carregar_dados_es()`:
 
 - Se o Parquet **não existe**, o app chama `prepare_data.py` e mostra progresso.
 - Ao ler o Parquet, o app:
@@ -102,7 +108,10 @@ O carregamento e “enriquecimento” do dataset é feito em [app_data.py](app_d
   - Aplica CSS global (accent da UI, sidebar, botões, etc.).
   - Orquestra a renderização das seções.
 
-- [app_data.py](app_data.py)
+- [covid_app/](covid_app/)
+  - Pacote principal com os módulos organizados por responsabilidade.
+
+- [covid_app/data.py](covid_app/data.py)
   - Carregamento do Parquet.
   - Regras de saneamento.
   - Criação de `Status_Analise`.
@@ -110,24 +119,22 @@ O carregamento e “enriquecimento” do dataset é feito em [app_data.py](app_d
 - [prepare_data.py](prepare_data.py)
   - Conversão `MICRODADOS.csv` → `dados_es_filtrados.parquet`.
 
-- [app_filters.py](app_filters.py)
+- [covid_app/filters.py](covid_app/filters.py)
   - Filtros na sidebar (município + período) e aplicação do recorte.
 
-- [app_sections.py](app_sections.py)
-  - Seções do dashboard (KPIs, tabela, mapa/ranking, comorbidades/faixa etária, sobrevida, temporal, cura).
-  - Cards KPI em HTML/CSS.
-  - Paleta de cores aplicada aos gráficos.
+- [covid_app/sections/](covid_app/sections/)
+  - Seções do dashboard (KPIs, tabela, mapa/ranking, comorbidades/faixa etária, sobrevida, temporal, cura, metodologia).
 
-- [app_export.py](app_export.py)
+- [covid_app/export.py](covid_app/export.py)
   - Exportação do recorte filtrado via `st.download_button`.
 
-- [app_geo.py](app_geo.py)
+- [covid_app/geo.py](covid_app/geo.py)
   - Carregamento do GeoJSON e normalização de nomes de município (para casar com o mapa).
 
-- [app_features.py](app_features.py)
+- [covid_app/features.py](covid_app/features.py)
   - Funções auxiliares (ex.: extração de idade em anos).
 
-- [app_nav.py](app_nav.py)
+- [covid_app/nav.py](covid_app/nav.py)
   - Âncoras e itens do sumário (navegação por seção).
 
 ---
@@ -189,7 +196,7 @@ O app usa Plotly para:
 
 ## 8) Exportação
 
-A exportação é implementada em [app_export.py](app_export.py):
+A exportação é implementada em [covid_app/export.py](covid_app/export.py):
 
 - Baixa **exatamente o recorte filtrado** (município e período)
 - Formato: `CSV` compactado (`.csv.gz`)

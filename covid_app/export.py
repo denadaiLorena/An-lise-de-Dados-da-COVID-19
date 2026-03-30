@@ -4,8 +4,8 @@ import io
 import pandas as pd
 import streamlit as st
 
-from app_geo import normalizar_municipio
-from app_nav import ANCHOR_EXPORTACAO
+from .geo import normalizar_municipio
+from .nav import ANCHOR_EXPORTACAO
 
 
 def _anchor(anchor_id: str) -> None:
@@ -31,9 +31,7 @@ def render_export_section(
 ) -> None:
     _anchor(ANCHOR_EXPORTACAO)
     st.subheader("Exportação")
-    st.caption(
-        "Baixe exatamente os microdados após os filtros aplicados (município e período)."
-    )
+    st.caption("Baixe exatamente os microdados após os filtros aplicados (município e período).")
 
     export_rows = len(df)
 
@@ -48,7 +46,6 @@ def render_export_section(
             + f"(limite para exportação no app: {max_export_rows:,}).".replace(",", ".")
         )
         st.caption("Refine os filtros (município e/ou período) para habilitar o download.")
-        st.divider()
         return
 
     municipio_tag = "TODOS" if municipio_sel == "Todos" else normalizar_municipio(str(municipio_sel))
@@ -67,4 +64,3 @@ def render_export_section(
         file_name=file_name,
         mime="application/gzip",
     )
-

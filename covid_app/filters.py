@@ -10,17 +10,14 @@ def aplicar_filtros_sidebar(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     Retorna (df_filtrado, contexto), onde `contexto` inclui municipio_sel, date_col,
     periodo_sel, dt_ini e dt_fim.
     """
+
     st.sidebar.header("Filtros")
 
     # Filtro por Município
     if "Municipio" in df.columns:
-        municipios = sorted(
-            [m for m in df["Municipio"].dropna().astype(str).unique().tolist() if m.strip()]
-        )
+        municipios = sorted([m for m in df["Municipio"].dropna().astype(str).unique().tolist() if m.strip()])
         municipios_opcoes = ["Todos"] + municipios
-        municipio_sel = st.sidebar.selectbox(
-            "Município", municipios_opcoes, index=0, key="municipio_sel"
-        )
+        municipio_sel = st.sidebar.selectbox("Município", municipios_opcoes, index=0, key="municipio_sel")
     else:
         municipio_sel = "Todos"
         st.sidebar.info("Coluna 'Municipio' não encontrada para filtrar.")
@@ -53,9 +50,7 @@ def aplicar_filtros_sidebar(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
             st.sidebar.info(f"Não foi possível inferir datas válidas em '{date_col}'.")
     else:
         periodo_sel = None
-        st.sidebar.info(
-            "Nenhuma coluna de data conhecida foi encontrada para filtrar o período."
-        )
+        st.sidebar.info("Nenhuma coluna de data conhecida foi encontrada para filtrar o período.")
 
     # Aplicar filtros
     df_filtrado = df

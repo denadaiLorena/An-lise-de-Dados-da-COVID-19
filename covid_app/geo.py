@@ -9,7 +9,10 @@ def carregar_geojson_municipios_es() -> dict:
     Tenta primeiro o endpoint oficial de malhas do IBGE. Se falhar (instabilidade/rota),
     usa um fallback público com GeoJSON de municípios por UF.
     """
-    ibge_url = "https://servicodados.ibge.gov.br/api/v2/malhas/estados/32?formato=application/vnd.geo+json&qualidade=intermediaria"
+
+    ibge_url = (
+        "https://servicodados.ibge.gov.br/api/v2/malhas/estados/32?formato=application/vnd.geo+json&qualidade=intermediaria"
+    )
     try:
         resp = requests.get(ibge_url, timeout=30)
         resp.raise_for_status()
