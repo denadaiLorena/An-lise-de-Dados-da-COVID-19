@@ -3,23 +3,10 @@ import html
 
 import streamlit as st
 
-from covid_app.data import PARQUET_PATH, carregar_dados_es
-from covid_app.nav import NAV_ITEMS
-from covid_app.export import render_export_section
-from covid_app.filters import aplicar_filtros_sidebar
-from covid_app.sections import (
-    render_comorbidades_e_etaria,
-    render_cura,
-    render_kdd_footer_expander,
-    render_kpis,
-    render_mapa_es_e_ranking,
-    render_municipio_table,
-    render_sobrevida_kdd,
-    render_temporal_letalidade,
-)
-
 
 def render_sidebar_sumario() -> None:
+    from covid_app.nav import NAV_ITEMS
+
     st.sidebar.divider()
     st.sidebar.markdown("### Sumário")
     st.sidebar.caption("Clique em um item para ir direto ao gráfico/seção.")
@@ -142,6 +129,25 @@ section[data-testid="stSidebar"] svg{
 def main():
     st.set_page_config(page_title="Painel COVID-19 ES", layout="wide")
     st.title("Painel COVID-19 - Espírito Santo")
+
+    try:
+        from covid_app.data import PARQUET_PATH, carregar_dados_es
+        from covid_app.export import render_export_section
+        from covid_app.filters import aplicar_filtros_sidebar
+        from covid_app.sections import (
+            render_comorbidades_e_etaria,
+            render_cura,
+            render_kdd_footer_expander,
+            render_kpis,
+            render_mapa_es_e_ranking,
+            render_municipio_table,
+            render_sobrevida_kdd,
+            render_temporal_letalidade,
+        )
+    except Exception as e:
+        st.error("Falha ao inicializar/importar módulos do app no ambiente de deploy.")
+        st.exception(e)
+        st.stop()
 
     with st.spinner("Carregando e processando a base filtrada do ES..."):
         cache_buster = os.path.getmtime(PARQUET_PATH) if os.path.exists(PARQUET_PATH) else None

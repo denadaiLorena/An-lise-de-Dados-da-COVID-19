@@ -109,7 +109,26 @@ def carregar_dados_es(cache_buster: Optional[float] = None) -> pd.DataFrame:
             progress_bar_down.empty()
             progress_bar_proc.empty()
 
-    df = pd.read_parquet(file_path)
+        if not os.path.exists(file_path):
+            st.error(
+                "O arquivo Parquet não foi criado. Verifique os logs acima (download/processamento) e a configuração do `MICRODADOS_URL`, se aplicável."
+            )
+            st.stop()
+
+    try:
+        df = pd.read_parquet(file_path)
+    except Exception as e:
+        st.error("Falha ao ler o Parquet de dados.")
+        st.exception(e)
+        st.stop()
+
+    required_cols = {"Evolucao", "DataObito"}
+    missing = sorted([c for c in required_cols if c not in df.columns])
+    if missing:
+        st.error(
+            "O Parquet carregou, mas faltam colunas necessárias para o app: " + ", ".join(missing)
+        )
+        st.stop()
 
     # Padronizar a coluna Evolucao removendo hifens residuais ou nulos
     df["Evolucao"] = df["Evolucao"].astype(str).replace({"-": "Ignorado", "nan": "Ignorado"})
