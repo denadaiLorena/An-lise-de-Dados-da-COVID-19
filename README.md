@@ -235,12 +235,14 @@ Para isso, ele precisa do `MICRODADOS.csv`.
 
 Opções no Cloud:
 
-1) Colocar `MICRODADOS.csv` no repositório (se for viável) — ou usar Git LFS para arquivos grandes.
-2) Configurar um Secret/ENV `MICRODADOS_URL` para o app baixar o CSV na primeira execução.
+1) (Recomendado) Configurar um Secret/ENV `PARQUET_URL` apontando para um **Parquet pronto**.
+2) Colocar `MICRODADOS.csv` no repositório (se for viável) — ou usar Git LFS para arquivos grandes.
+3) Configurar um Secret/ENV `MICRODADOS_URL` para o app baixar o CSV na primeira execução (mais pesado no Cloud).
 
 No Streamlit Cloud: *App settings → Secrets*:
 
 ```toml
+PARQUET_URL = "https://.../dados_es_filtrados.parquet"
 MICRODADOS_URL = "https://.../MICRODADOS.csv"
 ```
 
