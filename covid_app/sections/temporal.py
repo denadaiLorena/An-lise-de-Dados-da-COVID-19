@@ -20,7 +20,12 @@ def render_temporal_letalidade(df: pd.DataFrame) -> None:
     df_temporal["DataNotificacao"] = pd.to_datetime(df_temporal["DataNotificacao"], errors="coerce")
     df_temporal = df_temporal.dropna(subset=["DataNotificacao"])
 
-    df_temporal["Mes_Ano"] = df_temporal["DataNotificacao"].dt.to_period("M").astype(str)
+    # Compatível com datetime "pyarrow-backed" (ArrowTemporalProperties não possui .to_period)
+    df_temporal["Mes_Ano"] = (
+        df_temporal["DataNotificacao"].dt.year.astype("int64").astype(str)
+        + "-"
+        + df_temporal["DataNotificacao"].dt.month.astype("int64").astype(str).str.zfill(2)
+    )
 
     stats_tempo = (
         df_temporal.groupby("Mes_Ano").agg(Casos=("Obito", "size"), Obitos=("Obito", "sum")).reset_index()

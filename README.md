@@ -8,7 +8,8 @@ Dashboard interativo em **Streamlit** para análise de microdados de COVID-19 do
 - **Visualizações** (Plotly) e narrativa (“data storytelling”) entre gráficos
 - **Exportação** do recorte filtrado em **CSV compactado** (`.csv.gz`)
 
-> Este repositório trabalha com um arquivo local `MICRODADOS.csv` e gera um `dados_es_filtrados.parquet` otimizado para leitura pelo app.
+> O app **lê o dataset a partir do arquivo** `dados_es_filtrados.parquet`.
+> Se ele não existir, o projeto pode **gerar esse Parquet** a partir de um CSV (`MICRODADOS.csv`) ou baixar uma base via `PARQUET_URL`/`MICRODADOS_URL` (para deploy no Streamlit Community Cloud).
 
 ---
 
@@ -20,6 +21,7 @@ Dashboard interativo em **Streamlit** para análise de microdados de COVID-19 do
 - NumPy
 - PyArrow (Parquet)
 - Plotly
+- Requests (download opcional no Cloud)
 
 Dependências em [requirements.txt](requirements.txt).
 
@@ -33,19 +35,27 @@ No PowerShell, dentro da pasta do projeto:
 
 ```powershell
 python -m venv .venv
+```
+
+```powershell
 .\.venv\Scripts\Activate.ps1
+```
+Se o PowerShell bloquear a ativação por policy, rode (apenas na sessão atual) e tente de novo:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ```
 
 ### 2.2) Instalar dependências
 
 ```powershell
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
 ### 2.3) Rodar o app
 
 ```powershell
-streamlit run app.py
+python -m streamlit run app.py
 ```
 
 Se você tiver mais de um Python instalado, prefira rodar usando o executável da venv:
@@ -62,10 +72,10 @@ Na primeira execução (se não existir o Parquet), o app tenta preparar a base 
 
 ### Arquivos principais
 
-- `MICRODADOS.csv`
-  - CSV local (separador `;`, encoding `latin1`).
 - `dados_es_filtrados.parquet`
-  - Saída otimizada (colunar) para o app.
+  - **Fonte principal** do app (formato colunar otimizado).
+- `MICRODADOS.csv` (opcional)
+  - Usado apenas para **gerar** o Parquet na primeira execução (separador `;`, encoding `latin1`).
 
 ### Como o Parquet é gerado
 
@@ -216,35 +226,9 @@ Se você quiser alterar cores, procure pelo bloco `<style>` dentro de `render_si
 
 ---
 
-## Deploy no Streamlit Community Cloud
-
-De acordo com a documentação do Streamlit Community Cloud, o deploy funciona melhor quando:
-
-- O entrypoint está no repositório (aqui é [app.py](app.py)).
-- As dependências estão declaradas em [requirements.txt](requirements.txt).
-- Qualquer arquivo local necessário para rodar o app também está disponível no ambiente (no repo ou baixado em runtime).
-
 ### Configuração
 
 - **Main file path**: `app.py`
-
-### Dados (ponto mais comum de falha)
-
-Este app tenta gerar `dados_es_filtrados.parquet` automaticamente quando ele não existe.
-Para isso, ele precisa do `MICRODADOS.csv`.
-
-Opções no Cloud:
-
-1) (Recomendado) Configurar um Secret/ENV `PARQUET_URL` apontando para um **Parquet pronto**.
-2) Colocar `MICRODADOS.csv` no repositório (se for viável) — ou usar Git LFS para arquivos grandes.
-3) Configurar um Secret/ENV `MICRODADOS_URL` para o app baixar o CSV na primeira execução (mais pesado no Cloud).
-
-No Streamlit Cloud: *App settings → Secrets*:
-
-```toml
-PARQUET_URL = "https://.../dados_es_filtrados.parquet"
-MICRODADOS_URL = "https://.../MICRODADOS.csv"
-```
 
 ---
 
@@ -252,13 +236,12 @@ MICRODADOS_URL = "https://.../MICRODADOS.csv"
 
 ### “Não aparece nada / sem dados”
 
-- Verifique se `MICRODADOS.csv` está presente.
-- Verifique se o Parquet `dados_es_filtrados.parquet` foi gerado.
+- Verifique se o Parquet `dados_es_filtrados.parquet` está presente.
 - Confira se os filtros (município/período) não estão restringindo demais.
 
 ### “Primeira execução demora”
 
-É esperado: o app pode preparar o Parquet a partir do CSV local (processo pesado). Depois disso, o carregamento fica muito mais rápido.
+É esperado: o app pode estar lendo o Parquet pela primeira vez. Depois disso, o carregamento fica muito mais rápido.
 
 ### “Quero forçar recriar o Parquet”
 
@@ -270,7 +253,4 @@ python prepare_data.py
 
 ---
 
-## 11) Observações
-
-- Este projeto não publica automaticamente a origem do `MICRODADOS.csv`. Garanta que você tem permissão para uso/redistribuição do arquivo, se aplicável.
 
