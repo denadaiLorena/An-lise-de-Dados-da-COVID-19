@@ -13,6 +13,9 @@ Dashboard interativo em **Streamlit** para análise de microdados de COVID-19 do
 
 ---
 
+## Link do projeto:
+**https://an-lise-de-dados-da-covid-19-epdcsgchyceswrkjnqhd3r.streamlit.app/**
+
 ## 1) Tecnologias
 
 - Python
